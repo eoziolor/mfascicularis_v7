@@ -1,0 +1,1209 @@
+---
+title: "cyno_genome_analysis_public"
+author: "Elias Oziolor"
+date: "5/1/2020"
+output: html_document
+---
+# Cyno analysis
+
+# Feb 28, 2020
+
+## Starting with dotplot of alignments
+
+```{bash}
+parent=/path-to-dir/cyno_genome/analysis
+
+cd $parent
+
+wget ftp:/ftp.ensembl.org/pub/release-99/fasta/macaca_fascicularis/dna/Macaca_fascicularis.Macaca_fascicularis_5.0.dna.toplevel.fa.gz
+
+gunzip -c Macaca_fascicularis.Macaca_fascicularis_5.0.dna.toplevel.fa.gz > ensembl_cyno.fasta
+
+rm -rf Macaca_fascicularis.Macaca_fascicularis_5.0.dna.toplevel.fa.gz
+```
+
+## linking the phase genome
+
+```{bash}
+parent=/path-to-dir/cyno_genome
+
+cd $parent/analysis
+
+ln -s $parent/phase1.masked.fasta $parent/analysis/phase_cyno.fasta
+
+```
+
+## Running mummer
+ * Sooo I ran this on headnode...big booboo, but next time put it in a script
+
+```{bash}
+my_nucmer=/path-to-dir/mummer-4.0.0beta2/bin/nucmer
+my_ref=/path-to-dir/cyno_genome/analysis/ensembl_cyno.fasta
+my_novo=/path-to-dir/cyno_genome/analysis/phase_cyno.fasta
+my_out=/path-to-dir/cyno_genome/analysis/ensembl_x_novo
+
+$my_nucmer \
+-p $my_out \
+$my_ref \
+$my_novo
+
+```
+
+* Showing coordinates
+
+```{bash}
+# in script cyno_coord.sh
+parent=/path-to-dir/cyno_genome/analysis/
+my_coord=/path-to-dir/mummer-4.0.0beta2/bin/show-coords
+my_delta=$parent/ensembl_x_novo.delta
+my_out=$parent/ensembl_x_novo.coords
+
+$my_coord -r -c -l $my_delta > $my_out
+
+#submitting
+parent=/path-to-dir/cyno_genome/analysis/
+
+bsub -q medium -app large -J "show_coordinates" -n 4,4 -M 32GB -R "span[hosts=1] rusage[mem=32GB]" -o "$parent/err.log" -e "$parent/err.log" \
+"$parent/cyno_coord.sh"
+```
+
+* Plotting
+
+```{bash}
+#!/bin/bash
+
+parent=/path-to-dir/cyno_genome/analysis/
+cd $parent
+my_mummer=/path-to-dir/mummer-4.0.0beta2/bin/mummerplot
+my_in=/path-to-dir/cyno_genome/analysis/ensembl_x_novo.delta
+
+$my_mummer \
+-f \
+-p ensembl_x_novo \
+-l \
+--large \
+--png \
+$my_in
+
+# Submit
+
+parent=/path-to-dir/cyno_genome/analysis/
+
+bsub -q medium -app large -J "plot" -n 4,4 -M 32GB -R "span[hosts=1] rusage[mem=32GB]" -o "$parent/err.log" -e "$parent/err.log" \
+"$parent/cyno_plot.sh"
+
+```
+
+# Running dnadiff to look at differences between sequences
+
+```{bash}
+#!/bin/bash
+
+parent=/path-to-dir/cyno_genome/analysis/
+cd $parent
+
+my_dnadiff=/path-to-dir/mummer-4.0.0beta2/bin/dnadiff
+my_delta=/path-to-dir/cyno_genome/analysis/ensembl_x_novo.delta
+
+$my_dnadiff \
+-d $my_delta
+
+# Submitting
+
+parent=/path-to-dir/cyno_genome/analysis/
+
+bsub -q medium -app large -J "plot" -n 4,4 -M 32GB -R "span[hosts=1] rusage[mem=32GB]" -o "$parent/err.log" -e "$parent/err.log" \
+"$parent/cyno_dnadiff.sh"
+
+```
+
+* Plotting direct comparisons
+
+```{bash}
+#!/bin/bash
+
+parent=/path-to-dir/cyno_genome/analysis/
+cd $parent
+my_mummer=/path-to-dir/mummer-4.0.0beta2/bin/mummerplot
+my_in=/path-to-dir/cyno_genome/analysis/out.1delta
+
+$my_mummer \
+-f \
+-p otoplot \
+-l \
+--large \
+--png \
+$my_in
+
+# Submit
+
+parent=/path-to-dir/cyno_genome/analysis/
+
+bsub -q medium -app large -J "plot" -n 4,4 -M 32GB -R "span[hosts=1] rusage[mem=32GB]" -o "$parent/err.log" -e "$parent/err.log" \
+"$parent/otoplot.sh"
+
+```
+
+# Grabbing chromosomal repeat masked DNA to align to
+
+```{bash}
+parent=/path-to-dir/cyno_genome/repmask_analysis
+
+cd $parent
+
+wget ftp:/ftp.ensembl.org/pub/release-99/fasta/macaca_fascicularis/dna/Macaca_fascicularis.Macaca_fascicularis_5.0.dna_rm.chromosome*
+
+
+for i in $(ls -1); do
+new=$(echo $i | sed 's/.*chromosome\./g')
+mv $i $new
+done
+
+for i in $(ls -1 | sort -n | tail -n +3); do
+zcat $i >> ensembl_cyno_rmchr.fa
+done
+
+
+for i in $(ls -1 *.fa.gz | sort -n | head -n 2); do
+zcat $i >> ensembl_cyno_rmchr.fa
+done
+
+rm -rf *.fa.gz
+```
+
+## linking the phase genome
+
+```{bash}
+parent=/path-to-dir/cyno_genome
+
+cd $parent/repmask_analysis
+
+ln -s $parent/phase1.masked.fasta $parent/repmask_analysis/phase_cyno.fasta
+
+```
+
+## Running dnadiff
+
+```{bash}
+#!/bin/bash
+
+my_dnadiff=/path-to-dir/mummer-4.0.0beta2/bin/dnadiff
+my_ref=/path-to-dir/cyno_genome/repmask_analysis/ensembl_cyno_rmchr.fa
+my_phase=/path-to-dir/cyno_genome/repmask_analysis/phase_cyno.fasta
+my_out=/path-to-dir/cyno_genome/repmask_analysis/ensembl_x_phase
+
+$my_dnadiff \
+-p $my_out \
+$my_ref \
+$my_phase
+
+# Submitting
+
+parent=/path-to-dir/cyno_genome/repmask_analysis
+cd $parent
+
+bsub -q medium -app large -J "dnadiff_e_x_p" -n 24,24 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "$parent/err.log" -e "$parent/err.log" \
+"$parent/cyno_repmask_dnadiff.sh"
+
+```
+
+## Running dnadiff reverse
+
+```{bash}
+#!/bin/bash
+
+my_dnadiff=/path-to-dir/mummer-4.0.0beta2/bin/dnadiff
+my_ref=/path-to-dir/cyno_genome/repmask_analysis/ensembl_cyno_rmchr.fa
+my_phase=/path-to-dir/cyno_genome/repmask_analysis/phase_cyno.fasta
+my_out=/path-to-dir/cyno_genome/repmask_analysis/rev/phase_x_ensembl
+
+$my_dnadiff \
+-p $my_out \
+$my_phase \
+$my_ref
+
+# Submitting
+
+parent=/path-to-dir/cyno_genome/repmask_analysis/rev
+cd $parent
+
+bsub -q medium -app large -J "dnadiff_p_x_e" -n 24,24 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "$parent/err.log" -e "$parent/err.log" \
+"$parent/cyno_repmask_dnadiff_rev.sh"
+
+```
+
+# Mar 17, 2020
+
+## Trying a better visualization of mummer dot plot
+
+```{python}
+# Used DotPrep.py from https:/github.com/dnanexus/dot
+#! /usr/bin/env python
+
+# Author: Maria Nattestad
+# Email: mnattestad@dnanexus.com
+
+# This script prepares a nucmer output delta file for visualization in Dot
+# Parts of this code is adapted from Assemblytics unique anchor filtering
+
+
+import argparse
+import gzip
+import time
+import numpy as np
+import operator
+import re
+
+def run(args):
+	filename = args.delta
+	unique_length = args.unique_length
+	output_filename = args.out
+	keep_small_uniques = True
+	max_overview_alignments = args.overview
+
+	# Read through the file and store information indexed by Query sequence names
+	header_lines_by_query, lines_by_query = getQueryRefCombinations(filename)
+
+	# Figure out which alignments contain sufficient unique anchor sequences
+	unique_alignments = calculateUniqueness(header_lines_by_query, lines_by_query, unique_length, keep_small_uniques)
+
+	# Write a filtered delta file, and coordinate files with uniqueness tags
+	reference_lengths, fields_by_query = writeFilteredDeltaFile(filename, output_filename, unique_alignments, unique_length, header_lines_by_query)
+	
+	index_for_dot(reference_lengths, fields_by_query, output_filename, max_overview_alignments)
+
+
+def scrub(string):
+	return string.replace(",","_").replace("!","_").replace("~","_").replace("#", "_")
+
+
+def getQueryRefCombinations(filename):
+	print("header from delta file:")
+	
+	try:
+		f = gzip.open(filename, 'rt')
+		print(f.readline().strip())
+	except:
+		f = open(filename, 'r')
+		print(f.readline().strip())
+
+	# Ignore the first two lines for now
+	print(f.readline().strip())
+
+	linecounter = 0
+
+	current_query_name = ""
+	current_header = ""
+
+	lines_by_query = {}
+	header_lines_by_query = {}
+
+	before = time.time()
+
+	for line in f:
+		if line[0]==">":
+			linecounter += 1
+			current_header = line.strip()
+			current_query_name = scrub(current_header.split()[1])
+			
+			if header_lines_by_query.get(current_query_name, None) == None:
+				lines_by_query[current_query_name] = []
+				header_lines_by_query[current_query_name] = []
+		else:
+			fields = line.strip().split()
+			if len(fields) > 4:
+				# sometimes start and end are the other way around, but for this they need to be in order
+				query_min = min([int(fields[2]),int(fields[3])])
+				query_max = max([int(fields[2]),int(fields[3])])
+				lines_by_query[current_query_name].append((query_min,query_max))
+				header_lines_by_query[current_query_name].append(current_header)
+
+	f.close()
+
+	print("First read through the file: %d seconds for %d query-reference combinations" % (time.time()-before,linecounter))
+	
+	return (header_lines_by_query, lines_by_query)
+
+def calculateUniqueness(header_lines_by_query, lines_by_query, unique_length, keep_small_uniques):
+	before = time.time()
+	unique_alignments = {}
+	num_queries = len(lines_by_query)
+	print("Filtering alignments of %d queries" % (num_queries))
+	
+	num_query_step_to_report = num_queries/100
+	if num_queries < 100:
+		num_query_step_to_report = num_queries/10
+	if num_queries < 10:
+		num_query_step_to_report = 1
+
+	query_counter = 0
+
+	for query in lines_by_query:
+		unique_alignments[query] = summarize_planesweep(lines_by_query[query], unique_length_required = unique_length, keep_small_uniques = keep_small_uniques)
+		query_counter += 1
+		if (query_counter % num_query_step_to_report) == 0:
+			print("Progress: %d%%" % (query_counter*100/num_queries))
+	
+	print("Progress: 100%")
+
+	print("Deciding which alignments to keep: %d seconds for %d queries" % (time.time()-before,num_queries))
+
+	return unique_alignments
+
+
+def summarize_planesweep(lines,unique_length_required, keep_small_uniques=False):
+
+	unique_alignments = []
+
+	# If no alignments:
+	if len(lines)==0:
+		return []
+
+	# If only one alignment:
+	if len(lines) == 1:
+		if keep_small_uniques == True or abs(lines[0][1] - lines[0][0]) >= unique_length_required:
+			return [0]
+		else:
+			return []
+
+	starts_and_stops = []
+	for query_min,query_max in lines:
+		starts_and_stops.append((query_min,"start"))
+		starts_and_stops.append((query_max,"stop"))
+
+
+	sorted_starts_and_stops = sorted(starts_and_stops,key=operator.itemgetter(0))
+
+	current_coverage = 0
+	last_position = -1
+	sorted_unique_intervals_left = []
+	sorted_unique_intervals_right = []
+	for pos,change in sorted_starts_and_stops:
+		if current_coverage == 1:
+			sorted_unique_intervals_left.append(last_position)
+			sorted_unique_intervals_right.append(pos)
+
+		if change == "start":
+			current_coverage += 1
+		else:
+			current_coverage -= 1
+		last_position = pos
+
+
+	linecounter = 0
+	for query_min,query_max in lines:
+
+		i = binary_search(query_min,sorted_unique_intervals_left,0,len(sorted_unique_intervals_left))
+
+		exact_match = False
+		if sorted_unique_intervals_left[i] == query_min and sorted_unique_intervals_right[i] == query_max:
+			exact_match = True
+		sum_uniq = 0
+		while i < len(sorted_unique_intervals_left) and sorted_unique_intervals_left[i] >= query_min and sorted_unique_intervals_right[i] <= query_max:
+			sum_uniq += sorted_unique_intervals_right[i] - sorted_unique_intervals_left[i]
+			i += 1
+
+		if sum_uniq >= unique_length_required:
+			unique_alignments.append(linecounter)
+		elif keep_small_uniques == True and exact_match == True:
+			unique_alignments.append(linecounter)
+
+		linecounter += 1
+
+	return unique_alignments
+
+
+
+def binary_search(query, numbers, left, right):
+	#  Returns index of the matching element or the first element to the right
+	
+	if left >= right:
+		return right
+	mid = int((right+left)/2)
+	
+
+	if query == numbers[mid]:
+		return mid
+	elif query < numbers[mid]:
+		return binary_search(query,numbers,left,mid)
+	else: # if query > numbers[mid]:
+		return binary_search(query,numbers,mid+1,right)
+
+
+def natural_key(string_):
+	"""See http:/www.codinghorror.com/blog/archives/001018.html"""
+	return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
+
+def writeFilteredDeltaFile(filename, output_filename, unique_alignments, unique_length, header_lines_by_query):
+	before = time.time()
+	f_out_delta = gzip.open(output_filename + ".uniqueAnchorFiltered_l%d.delta.gz" % (unique_length),'wt')
+	
+	try:
+		f = gzip.open(filename, 'rt')
+		header1 = f.readline()
+	except:
+		f = open(filename, 'r')
+		header1 = f.readline()
+		
+	f_out_delta.write(header1) # write the first line that we read already
+	f_out_delta.write(f.readline())
+	
+	linecounter = 0
+
+	# For filtered delta file:
+	list_of_unique_alignments = []
+	alignment_counter = {}
+	keep_printing = False
+
+	# For coords:
+	current_query_name = ""
+	current_query_position = 0
+
+	# For basic assembly stats:
+	ref_sequences = set()
+	query_sequences = set()
+	reference_lengths = []
+	query_lengths = {}
+	fields_by_query = {}
+
+
+	for line in f:
+		linecounter += 1
+		if line[0]==">":
+			fields = line.strip().split()
+			
+			# For delta file output:
+			query = scrub(fields[1])
+			list_of_unique_alignments = unique_alignments[query]
+
+			header_needed = False
+			for index in list_of_unique_alignments:
+				if line.strip() == header_lines_by_query[query][index]:
+					header_needed = True
+			if header_needed == True:
+				f_out_delta.write(line) # if we have any alignments under this header, print(the header)
+			alignment_counter[query] = alignment_counter.get(query,0)
+
+			# For coords:
+			current_reference_name = scrub(fields[0][1:])
+			current_query_name = scrub(fields[1])
+
+			current_reference_size = int(fields[2])
+			current_query_size = int(fields[3])
+
+			# For index:
+			if not current_reference_name in ref_sequences:
+				reference_lengths.append((current_reference_name, current_reference_size))
+				ref_sequences.add(current_reference_name)
+			if not current_query_name in query_sequences:
+				query_lengths[current_query_name] = current_query_size
+				query_sequences.add(current_query_name)
+
+		else:
+			fields = line.strip().split()
+			if len(fields) > 4:
+				# For coords:
+				ref_start = int(fields[0])
+				ref_end = int(fields[1])
+				query_start = int(fields[2])
+				query_end = int(fields[3])
+				csv_tag = "repetitive"
+				if alignment_counter[query] in list_of_unique_alignments:
+					f_out_delta.write(line)
+					csv_tag = "unique"
+					keep_printing = True
+				else:
+					keep_printing = False
+				fields = [ref_start, ref_end, query_start, query_end, current_reference_size, current_query_size, current_reference_name, current_query_name, csv_tag]
+				if fields_by_query.get(current_query_name, None) == None:
+					fields_by_query[current_query_name] = []
+				fields_by_query[current_query_name].append(fields)
+				alignment_counter[query] = alignment_counter[query] + 1
+
+			elif keep_printing == True:
+				f_out_delta.write(line)
+
+	f.close()
+	f_out_delta.close()
+	# f_out_coords.close()
+
+	print("Writing filtered delta file and capturing information for coords file: %d seconds for %d total lines in file" % (time.time()-before,linecounter))
+	
+	return reference_lengths, fields_by_query
+
+def index_for_dot(reference_lengths, fields_by_query, output_prefix, max_overview_alignments):
+
+	#  Find the order of the reference chromosomes
+	reference_lengths.sort(key=lambda x: natural_key(x[0]))
+	
+	#  Find the cumulative sums
+	cumulative_sum = 0
+	ref_chrom_offsets = {}
+	queries_by_reference = {}
+	for ref,ref_length in reference_lengths:
+		ref_chrom_offsets[ref] = cumulative_sum
+		cumulative_sum += ref_length
+		queries_by_reference[ref] = set()
+
+	#  Calculate relative positions of each alignment in this cumulative length, and take the median of these for each query, then sort the queries by those scores
+	flip_by_query = {}
+	unique_references_by_query = {} # for index, only unique alignments
+	all_references_by_query = {} # for index, including repetitive alignments
+	relative_ref_position_by_query = [] # for ordering
+
+
+	ordered_tags = ["unique", "repetitive"]
+
+
+	f_out_coords = open(output_prefix + ".coords", 'w')
+	f_out_coords.write("ref_start,ref_end,query_start,query_end,ref\n")
+
+	query_byte_positions = {}
+	query_lengths = {}
+
+	all_alignments = []
+	last_query = ""
+
+	for query_name in fields_by_query:
+
+		lines = fields_by_query[query_name]
+		sum_forward = 0
+		sum_reverse = 0
+		ref_position_scores = []
+		unique_references_by_query[query_name] = set()
+		all_references_by_query[query_name] = set()
+
+		for fields in lines:
+			tag = fields[8]
+
+			query_name = fields[7]
+			query_lengths[query_name] = int(fields[5])
+
+			all_references_by_query[query_name].add(ref)
+			# Only use unique alignments to decide contig orientation
+			if tag == "unique":
+				query_stop = int(fields[3])
+				query_start = int(fields[2])
+				ref_start = int(fields[0])
+				ref_stop = int(fields[1])
+				alignment_length = abs(int(fields[3])-int(fields[2]))
+				ref = fields[6]
+
+				# for index:
+				unique_references_by_query[query_name].add(ref)
+				queries_by_reference[ref].add(query_name)
+
+				# for ordering:
+				ref_position_scores.append(ref_chrom_offsets[ref] + (ref_start+ref_stop)/2)
+
+				# for orientation:
+				if query_stop < query_start:
+					sum_reverse += alignment_length
+				else:
+					sum_forward += alignment_length
+
+		# orientation:
+		flip = sum_reverse > sum_forward
+		flip_by_query[query_name] = "-" if (flip == True) else "+"
+
+
+		for tag in ordered_tags:
+			query_byte_positions[(last_query, "end")] = f_out_coords.tell()
+			query_byte_positions[(query_name, tag)] = f_out_coords.tell()
+			f_out_coords.write("!" + query_name + "!" + tag +"\n")
+			
+			for fields in lines:
+				if fields[8] == tag:
+					if flip == True:
+						fields[2] = int(fields[5]) - int(fields[2])
+						fields[3] = int(fields[5]) - int(fields[3])
+
+					output_fields = [fields[0], fields[1], fields[2], fields[3], fields[6]]
+					f_out_coords.write(",".join([str(i) for i in output_fields]) + "\n")
+					
+					# For alignment overview:
+					alignment_length = abs(int(fields[3])-int(fields[2]))
+					all_alignments.append(([fields[0], fields[1], fields[2], fields[3], fields[6], fields[7], fields[8]], alignment_length))
+
+		# ordering
+		if len(ref_position_scores) > 0:
+			relative_ref_position_by_query.append((query_name,np.median(ref_position_scores)))
+		else:
+			relative_ref_position_by_query.append((query_name,0))
+
+		last_query = query_name
+
+
+	query_byte_positions[(last_query, "end")] = f_out_coords.tell()
+
+	relative_ref_position_by_query.sort(key=lambda x: x[1])
+
+	f_out_index = open(output_prefix + ".coords.idx", 'w')
+
+	f_out_index.write("#ref\n")
+	f_out_index.write("ref,ref_length,matching_queries\n")
+	# reference_lengths is sorted by the reference chromosome name
+	for ref,ref_length in reference_lengths:
+		f_out_index.write("%s,%d,%s\n" % (ref,ref_length,"~".join(queries_by_reference[ref])))
+
+	f_out_index.write("#query\n")
+	f_out_index.write("query,query_length,orientation,bytePosition_unique,bytePosition_repetitive,bytePosition_end,unique_matching_refs,matching_refs\n")
+	# relative_ref_position_by_query is sorted by rel_pos
+	for query,rel_pos in relative_ref_position_by_query:
+		f_out_index.write("%s,%d,%s,%d,%d,%d,%s,%s\n" % (query, query_lengths[query], flip_by_query[query], query_byte_positions[(query,"unique")], query_byte_positions[(query,"repetitive")] - query_byte_positions[(query,"unique")], query_byte_positions[(query,"end")] - query_byte_positions[(query,"repetitive")], "~".join(unique_references_by_query[query]), "~".join(all_references_by_query[query])))
+
+	f_out_index.write("#overview\n")
+	f_out_index.write("ref_start,ref_end,query_start,query_end,ref,query,tag\n")
+
+	num_overview_alignments = min(max_overview_alignments,len(all_alignments))
+	if num_overview_alignments < len(all_alignments):
+		print("Included the longest " + str(max_overview_alignments) + " alignments in the index under #overview (change this with the --overview parameter), out of a total of " + str(len(all_alignments)) + " alignments.")
+
+	all_alignments.sort(key=lambda x: -x[1])
+	overview_alignments = all_alignments[0:num_overview_alignments]
+	for tup in overview_alignments:
+		f_out_index.write(",".join([str(i) for i in tup[0]]) + "\n")
+
+	f_out_index.close()
+
+def main():
+	parser=argparse.ArgumentParser(description="Take a delta file, apply Assemblytics unique anchor filtering, and prepare coordinates input files for Dot")
+	parser.add_argument("--delta",help="delta file" ,dest="delta", type=str, required=True)
+	parser.add_argument("--out",help="output file" ,dest="out", type=str, default="output")
+	parser.add_argument("--unique-length",help="The total length of unique sequence an alignment must have on the query side to be retained. Default: 10000" ,dest="unique_length",type=int, default=10000)
+	parser.add_argument("--overview",help="The number of alignments to include in the coords.idx output file, which will be shown in the overview for Dot. Default: 1000" ,dest="overview",type=int, default=1000)
+	parser.set_defaults(func=run)
+	args=parser.parse_args()
+	args.func(args)
+
+if __name__=="__main__":
+	main()
+```
+
+## This prepares the files for Dot
+
+```{bash}
+parent=/path-to-dir/cyno_genome/analysis
+cd $parent
+
+$parent/DotPrep.py \
+--delta out.1delta \
+--out otodot \
+--unique-length 100000 \
+--overview 100000
+```
+
+## Running BCM genome comparison
+
+# Downloaded genome from https:/urldefense.proofpoint.com/v2/url?u=https-3A__www.ncbi.nlm.nih.gov_assembly_GCA-5F011100615.1&d=DwMFaQ&c=UE1eNsedaKncO0Yl_u8bfw&r=0aOebVngF-5zGTbUg5CHIAzQx-UOQ0qWmeUhqMOFPIQ&m=tgpgEUYRlpaLGsxrYoHUwns-SdGpmIMKamOOEQV3AHg&s=WCjbNJZN9QivyCtq59RWTv7mKAbweeGS1ft_zQyZFho&e=
+
+```{bash}
+# Removing wordy header
+zcat bcm_genome.fna.gz | sed 's/.*chromosome\ />chromosome/g' | sed 's/\,.*/g' > bcm_cyno.fasta
+```
+
+## linking the phase genome
+
+```{bash}
+parent=/path-to-dir/cyno_genome
+
+cd $parent/analysis_bcm
+
+ln -s $parent/phase1.masked.fasta $parent/analysis_bcm/phase_cyno.fasta
+```
+
+```{bash}
+#!/bin/bash
+
+my_nucmer=/path-to-dir/mummer-4.0.0beta2/bin/nucmer
+my_ref=/path-to-dir/cyno_genome/analysis_bcm/bcm_cyno.fasta
+my_phase=/path-to-dir/cyno_genome/analysis_bcm/phase_cyno.fasta
+my_out=/path-to-dir/cyno_genome/analysis_bcm/bcm_x_phase
+
+$my_nucmer \
+-p $my_out \
+$my_ref \
+$my_phase
+
+#submitting
+parent=/path-to-dir/cyno_genome/analysis_bcm/
+
+cd $parent
+
+bsub -q medium -app large -J "nucmer" -n 16,16 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "$parent/err.log" -e "$parent/err.log" \
+"$parent/cyno_nucmer.sh"
+
+```
+
+## Running dotplot prep
+
+```{bash}
+parent=/path-to-dir/cyno_genome/analysis_bcm
+cd $parent
+
+$parent/DotPrep.py \
+--delta bcm_x_phase.delta \
+--out bcm_x_phase \
+--unique-length 100000 \
+--overview 100000
+
+```
+
+# Working on bwa alignment of illuma reads
+
+## Location of raw reads
+/path-to-dirP101HW18041241-01_shixiehou_20181107/00.data/01.raw_data
+
+## Don't use next script
+
+```{bash}
+#SCRIPT
+
+#!/bin/bash
+
+parent=/path-to-dir/P101HW18041241-01_shixiehou_20181107/00.data/01.raw_data/01.DES/NDSW27106
+offspring=/path-to-dir/cyno_genome/illumina
+
+cd $parent
+
+zcat NDSW27106_L2_1.fq.gz NDSW27106_L3_1.fq.gz NDSW27106_L7_1.fq.gz NDSW27106_L8_1.fq.gz | gzip > $offspring/illumina_1.fq.gz
+zcat NDSW27106_L2_2.fq.gz NDSW27106_L3_2.fq.gz NDSW27106_L7_2.fq.gz NDSW27106_L8_2.fq.gz | gzip > $offspring/illumina_2.fq.gz
+###
+# Merging _1 and _2 reads from diferent lanes
+parent=/path-to-dir/P101HW18041241-01_shixiehou_20181107/00.data/01.raw_data/01.DES/NDSW27106
+offspring=/path-to-dir/cyno_genome/illumina
+
+cd $offspring
+
+
+bsub -q medium -app large -J "nucmer" -n 4,4 -M 32GB -R "span[hosts=1] rusage[mem=32GB]" -o "$offspring/err.log" -e "$offspring/err.log" \
+"$offspring/illumina_merge.sh"
+
+```
+
+## Actually will align first and then combine sorted bams!
+
+## linking the phase genome
+
+```{bash}
+parent=/path-to-dir/cyno_genome
+
+cd $parent/illumina
+
+ln -s $parent/phase1.masked.fasta $parent/illumina/phase_cyno.fasta
+```
+
+## softlinking files
+
+```{bash}
+my_dir=/path-to-dir/P101HW18041241-01_shixiehou_20181107/00.data/01.raw_data/01.DES/NDSW27106
+my_offspring=/path-to-dir/cyno_genome/illumina/
+
+cp $my_dir/* $my_offspring/
+
+```
+
+## Trimming illumina reads
+
+```{bash}
+#!/bin/bash
+
+my_trim=/path-to-dir/bin/trimmomatic.jar
+my_dir=/path-to-dir/cyno_genome/illumina/
+my_file=/path-to-dir/adapters_all.fa
+
+cd $my_dir
+
+for i in $(ls -1 *.fq.gz | head -n 1 | sed 's/\_[1|2].*/g' | uniq); do
+
+sample=$(echo $i)
+
+fq1=$my_dir/${i}_1.fq.gz
+fq2=$my_dir/${i}_2.fq.gz
+pfq1=$my_dir/pair_${i}_1.fq.gz
+pfq2=$my_dir/pair_${i}_2.fq.gz
+ufq1=$my_dir/unpair_${i}_1.fq.gz
+ufq2=$my_dir/unpair_${i}_2.fq.gz
+
+java -jar $my_trim PE -threads 23 \
+$fq1 $fq2 \
+$pfq1 $ufq1 $pfq2 $ufq2 \
+ILLUMINACLIP:${my_file}:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 HEADCROP:10
+done
+
+# Submitting several jobs
+my_trim=/path-to-dir/bin/trimmomatic.jar
+my_dir=/path-to-dir/cyno_genome/illumina/
+my_file=/path-to-dir/adapters_all.fa
+
+cd $my_dir
+
+for i in $(ls -1 *.fq.gz | sed 's/\_[1|2].*/g' | uniq); do
+
+sample=$(echo $i)
+
+fq1=$my_dir/${i}_1.fq.gz
+fq2=$my_dir/${i}_2.fq.gz
+pfq1=$my_dir/pair_${i}_1.fq.gz
+pfq2=$my_dir/pair_${i}_2.fq.gz
+ufq1=$my_dir/unpair_${i}_1.fq.gz
+ufq2=$my_dir/unpair_${i}_2.fq.gz
+
+bsub -q medium -app large -J "trim_${i}" -n 24,24 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "$offspring/err.log" -e "$offspring/err.log" \
+"java -jar $my_trim PE -threads 23 $fq1 $fq2 $pfq1 $ufq1 $pfq2 $ufq2 ILLUMINACLIP:${my_file}:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 HEADCROP:10"
+done
+
+```
+
+## Alignment of reads to genome
+
+```{bash}
+# Directory and file assignment for each file and program
+my_dir=/path-to-dir/cyno_genome/illumina
+my_bwa=/path-to-dir/bwa-0.7.17/bwa
+my_sam=/path-to-dir/samtools-1.9/bin/samtools
+my_gen=/path-to-dir/cyno_genome/illumina/phase_cyno.fasta
+
+cd $my_dir
+
+for i in $(ls -1 pair*.fq.gz | sed 's/\_[1|2].*/g' | sed 's/pair\_/g' | uniq); do
+
+sample=$(echo $i)
+
+fq1=$my_dir/pair_${i}_1.fq.gz
+fq2=$my_dir/pair_${i}_2.fq.gz
+
+#others
+rg=$(echo \@RG\\tID:$sample\\tPL:Illumina\\tPU:x\\tLB:combined\\tSM:$sample)
+outroot=${sample}.bam
+
+bsub -q medium -app large -J "${sample}" -n 24,24 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "${my_dir}/${sample}.err" -e "${my_dir}/${sample}.err" \
+"$my_bwa mem $my_gen -t 23 $fq1 $fq2 | \
+$my_sam view -q 30 -S -h -u - | \
+$my_sam sort -T $my_dir/$outroot > $my_dir/$outroot"
+done
+
+cd $my_dir
+
+```
+
+# Mar 18, 2020
+
+## Merging aligned bams
+
+```{bash}
+my_btools=/path-to-dir/bamtools/build/src/toolkit/bamtools
+my_dir=/path-to-dir/cyno_genome/illumina
+
+cd $my_dir
+
+realpath *.bam > bams.list
+
+bsub -q medium -app large -J "bammerge" -n 24,24 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "${my_dir}/bammerge.err" -e "${my_dir}/bammerge.err" \
+"${my_btools} merge -list ${my_dir}/bams.list -out ${my_dir}/combined.bam"
+
+```
+
+## Installing psmc
+
+```{bash}
+cd /path-to-dir/
+
+git clone https:/github.com/lh3/psmc.git
+cd psmc
+make
+cd utils
+make
+```
+
+## Install bcftools
+```{bash}
+cd /path-to-dir/
+wget https:/github.com/samtools/bcftools/releases/download/1.10.2/bcftools-1.10.2.tar.bz2
+
+tar -xf bcftools-1.10.2.tar.bz2
+
+cd bcftools-1.10.2
+./configure --prefix=/path-to-dir/bcftools-1.10.2
+make
+make install
+```
+
+## Creating consensus sequence
+
+```{bash}
+#!/bin/bash
+
+# files
+my_sam=/path-to-dir/samtools-1.9/bin/samtools
+my_bcf=/path-to-dir/bcftools-1.10.2/bin/bcftools
+my_vcfu=/path-to-dir/bcftools-1.10.2/bin/vcfutils.pl
+my_inbam=/path-to-dir/cyno_genome/illumina/combined.bam
+my_genome=/path-to-dir/cyno_genome/illumina/phase_cyno.fasta
+my_out=/path-to-dir/cyno_genome/illumina/consensus.fq.gz
+
+# code
+$my_sam mpileup -C50 -uf $my_genome $my_inbam |\
+$my_bcf call -c - |\
+$my_vcfu vcf2fq -d 10 -D 100 |\
+gzip > $my_out
+
+# Submitting
+my_dir=/path-to-dir/cyno_genome/illumina/
+
+bsub -q long -app large -J "diploid_gen" -n 24,24 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "${my_dir}/diploid.err" -e "${my_dir}/diploid.err" "${my_dir}/diploid_gen.sh"
+```
+
+## Flagstat
+
+```{bash}
+my_sam=/path-to-dir/samtools-1.9/bin/samtools
+my_inbam=/path-to-dir/cyno_genome/illumina/combined.bam
+
+
+bsub -q medium -app large -J "flagstat" -n 24,24 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "${my_dir}/flagstat.err" -e "${my_dir}/flagstat.err" "$my_sam flagstat $my_inbam"
+
+```
+
+# Installing bedtools
+
+```{bash}
+wget https:/github.com/arq5x/bedtools2/releases/download/v2.29.1/bedtools-2.29.1.tar.gz
+tar -zxvf bedtools-2.29.1.tar.gz
+cd bedtools2
+make
+```
+
+# Bedtools for proportion of genome covered
+
+```{bash}
+#!/bin/bash
+
+my_bed=/path-to-dir/bedtools2/bin/bedtools
+my_bam=/path-to-dir/cyno_genome/illumina/combined.bam
+my_gen=/path-to-dir/cyno_genome/illumina/phase_cyno.fasta
+my_dir=/path-to-dir/cyno_genome/illumina/
+
+zero=$($my_bed genomecov -ibam $my_bam -g my_gen -bga | awk '$4==0 {bpCountZero+=($3-$2)} {print bpCountZero}' | tail -1)
+nonzero=$($my_bed genomecov -ibam $my_bam -g my_gen -bga | awk '$4>0 {bpCountZero+=($3-$2)} {print bpCountZero}' | tail -1)
+percent=$(bc <<< "scale=6; ($nonzero / ($zero + $nonzero))*100")
+
+echo $percent > $my_dir/genomecov.out
+
+#submit
+my_dir=/path-to-dir/cyno_genome/illumina/
+
+bsub -q medium -app large -J "genomecov" -n 24,24 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "${my_dir}/genomecov.err" -e "${my_dir}/genomecov.err" "$my_dir/genomecov.sh"
+
+```
+
+## PSMC
+
+```{bash}
+# step 1
+my_dir=/path-to-dir/cyno_genome/illumina/
+my_psmcdir=/path-to-dir/psmc/
+
+$my_psmcdir/utils/fq2psmcfa -q20 $my_dir/consensus.fq.gz > $my_dir/consensus.psmcfa
+
+# step 2
+bsub -q medium -app large -J "diploid_gen" -n 24,24 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "${my_dir}/psmc.err" -e "${my_dir}/psmc.err" "$my_psmcdir/psmc -N25 -t15 -r5 -p "4+25*2+4+6" -o $my_dir/consensus.psmc $my_dir/consensus.psmcfa"
+
+# step 3
+$my_psmcdir/utils/psmc2history.pl $my_dir/consensus.psmc | $my_psmcdir/utils/history2ms.pl > $my_dir/ms-cmd.sh
+
+# step 4
+$my_psmcdir/utils/psmc_plot.pl -g 6 diploid $my_dir/consensus.psmc
+
+```
+
+## Bootstrapping
+
+```{bash}
+# Locations
+my_bootdir=/path-to-dir/cyno_genome/illumina/psmc_boot
+my_dir=/path-to-dir/cyno_genome/illumina/
+my_psmcdir=/path-to-dir/psmc/
+
+mkdir -p $my_bootdir
+
+# step 1: Use same consensus and psmcfa
+$my_psmcdir/utils/splitfa $my_dir/consensus.psmcfa > $my_bootdir/split_consensus.psmcfa
+
+# step 2: bootstrap
+seq 100 | xargs -i echo psmc -N25 -t15 -r5 -b -p "4+25*2+4+6" \
+	    -o round-{}.psmc split.fa | sh
+	    
+for i in {1..100}; do
+bsub -q medium -app large -J "diploid_gen" -n 4,4 -M 16GB -R "span[hosts=1] rusage[mem=16GB]" -o "${my_bootdir}/boot.err" -e "${my_bootdir}/boot.err" "${my_psmcdir}/psmc -N25 -t15 -r5 -b -p '4+25*2+4+6' -o round-${i}.psmc ${my_bootdir}/split_consensus.psmcfa"
+done
+
+# step3: combine
+cat $my_dir/consensus.psmc $my_bootdir/round*.psmc > $my_bootdir/combined.psmc
+
+# step 4
+$my_psmcdir/utils/psmc_plot.pl -g 7 boot $my_bootdir/combined.psmc
+
+```
+
+# Plotting result
+
+```{r}
+library(ggplot2)
+psmc.result<-function(file,i.iteration=25,mu=1e-8,s=100,g=1)
+{
+	X<-scan(file=file,what="",sep="\n",quiet=TRUE)
+	
+	START<-grep("^RD",X)
+	END<-grep("^/",X)
+	
+	X<-X[START[i.iteration+1]:END[i.iteration+1]]
+	
+	TR<-grep("^TR",X,value=TRUE)
+	RS<-grep("^RS",X,value=TRUE)
+	
+	write(TR,"temp.psmc.result")
+	theta0<-as.numeric(read.table("temp.psmc.result")[1,2])
+	N0<-theta0/4/mu/s
+	
+	write(RS,"temp.psmc.result")
+	a<-read.table("temp.psmc.result")
+	Generation<-as.numeric(2*N0*a[,3])
+	Ne<-as.numeric(N0*a[,4])
+	
+	file.remove("temp.psmc.result")
+	
+	n.points<-length(Ne)
+	YearsAgo<-c(as.numeric(rbind(Generation[-n.points],Generation[-1])),
+		Generation[n.points])*g
+	Ne<-c(as.numeric(rbind(Ne[-n.points],Ne[-n.points])),
+		Ne[n.points])
+	
+	data.frame(YearsAgo,Ne)
+}
+setwd("C:/Users/OZIOLE/Desktop/projects/CompTox_cyno_genome/paper/figures/")
+
+test<-psmc.result("C:/Users/OZIOLE/Desktop/projects/CompTox_cyno_genome/paper/figures/combined.psmc",
+             i.iteration = 25,
+             mu=2.5e-8,
+             s=1000,
+             g=6)
+
+ggplot(test,
+       aes(x=log10(YearsAgo), y = Ne))+
+  geom_line()+
+  theme_classic()
+
+```
+
+# Dot plot for re-ordered cyno.v7
+## Running Ensembl comparison
+
+## linking the phase genome
+
+```{bash}
+parent=/path-to-dir/cyno_genome
+
+mkdir -p $parent/analysis_reordered
+
+cd $parent/analysis_reordered
+
+ln -s $parent/phase_reordered/phase0.jelly.out.reordered.fasta $parent/analysis_reordered/phase_cyno.fasta
+```
+
+```{bash}
+#!/bin/bash
+
+my_nucmer=/path-to-dir/mummer-4.0.0beta2/bin/nucmer
+my_ref=/path-to-dir/cyno_genome/analysis/ensembl_cyno.fasta
+my_phase=/path-to-dir/cyno_genome/analysis_reordered/phase_cyno.fasta
+my_out=/path-to-dir/cyno_genome/analysis_reordered/ensembl_x_phase
+
+$my_nucmer \
+-p $my_out \
+$my_ref \
+$my_phase
+
+#submitting
+parent=/path-to-dir/cyno_genome/analysis_reordered/
+
+cd $parent
+
+bsub -q medium -app large -J "nucmer" -n 16,16 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "$parent/err.log" -e "$parent/err.log" \
+"$parent/cyno_nucmer.sh"
+
+```
+
+## Running dotplot prep
+
+```{bash}
+parent=/path-to-dir/cyno_genome/analysis_reordered
+cd $parent
+
+cp ../analysis/DotPrep.py .
+
+$parent/DotPrep.py \
+--delta ensembl_x_phase.delta \
+--out ensembl_x_phase \
+--unique-length 100000 \
+--overview 100000
+
+```
+
+# Dot plot for re-ordered cyno.v7
+## Running Ensembl comparison
+
+## linking the phase genome
+
+```{bash}
+parent=/path-to-dir/cyno_genome
+
+mkdir -p $parent/analysis_reordered_bcm
+
+cd $parent/analysis_reordered_bcm
+
+ln -s $parent/phase_reordered/phase0.jelly.out.reordered.fasta $parent/analysis_reordered_bcm/phase_cyno.fasta
+```
+
+```{bash}
+#!/bin/bash
+
+my_nucmer=/path-to-dir/mummer-4.0.0beta2/bin/nucmer
+my_ref=/path-to-dir/cyno_genome/analysis_bcm/bcm_cyno.fasta
+my_phase=/path-to-dir/cyno_genome/analysis_reordered_bcm/phase_cyno.fasta
+my_out=/path-to-dir/cyno_genome/analysis_reordered_bcm/bcm_x_phase
+
+$my_nucmer \
+-p $my_out \
+$my_ref \
+$my_phase
+
+#submitting
+parent=/path-to-dir/cyno_genome/analysis_reordered_bcm/
+
+cd $parent
+
+bsub -q medium -app large -J "nucmer" -n 16,16 -M 64GB -R "span[hosts=1] rusage[mem=64GB]" -o "$parent/err.log" -e "$parent/err.log" \
+"$parent/cyno_nucmer.sh"
+
+```
+
+## Running dotplot prep
+
+```{bash}
+parent=/path-to-dir/cyno_genome/analysis_reordered_bcm
+cd $parent
+
+cp ../analysis/DotPrep.py .
+
+$parent/DotPrep.py \
+--delta bcm_x_phase.delta \
+--out bcm_x_phase \
+--unique-length 100000 \
+--overview 100000
+
+```
+
+# Dot plots
+
+https:/dnanexus.github.io/dot/
