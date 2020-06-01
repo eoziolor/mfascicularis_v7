@@ -1,0 +1,36 @@
+Juicer[1] and 3ddna[2] were used to generate .hic and .assembly files for Juicebox[3,4],
+which was in turn used to manually correct suspected scaffolding errors in its UI. The
+inputs to the Juicer/3ddna process were the BAM file containing the Hi-C alignments and an
+AGP file describing a preliminary Hi-C scaffolding solution. The following commands were
+run to generate the .hic and .assembly files:
+
+1. agp2assembly.py[6] 0-oldworld_monkey.fasta.agp 0-oldworld_monkey.fasta.agp.assembly
+2. matlock[5] bam2 juicer 0-oldworld_monkey.bam 0-oldworld_monkey.bam.links.txt
+3. LC_ALL=C sort --parallel 8 -S 20G -k2,2 -k6,6 0-oldworld_monkey.bam.links.txt > 0-oldworld_monkey.bam.sorted.links.txt
+4. bash 3d-dna/visualize/run-assembly-visualizer.sh -p false 0-oldworld_monkey.fasta.agp.assembly 0-oldworld_monkey.bam.sorted.links.txt
+
+
+
+References:
+
+1. Neva C. Durand, Muhammad S. Shamim, Ido Machol, Suhas S. P. Rao, Miriam H. Huntley,
+Eric S. Lander, and Erez Lieberman Aiden. "Juicer provides a one-click system for analyzing
+loop-resolution Hi-C experiments." Cell Systems 3(1), 2016.
+
+2. Dudchenko, O., Batra, S.S., Omer, A.D., Nyquist, S.K., Hoeger, M., Durand, N.C., Shamim,
+M.S., Machol, I., Lander, E.S., Aiden, A.P., et al. (2017). De novo assembly of the Aedes
+aegypti genome using Hi-C yields chromosome-length scaffolds. Science. Apr 7;
+356(6333):92-95. doi: https://doi.org/10.1126/science.aal3327. Epub 2017 Mar 23.
+
+3. Neva C. Durand*, James T. Robinson*, Muhammad S. Shamim, Ido Machol, Jill P. Mesirov,
+Eric S. Lander, and Erez Lieberman Aiden. “Juicebox provides a visualization system for
+Hi-C contact maps with unlimited zoom.” Cell Systems, July 2016.
+
+4. Suhas S.P. Rao*, Miriam H. Huntley*, Neva C. Durand, Elena K. Stamenova, Ivan D.
+Bochkov, James T. Robinson, Adrian L. Sanborn, Ido Machol, Arina D. Omer, Eric S. Lander,
+Erez Lieberman Aiden. “A 3D Map of the Human Genome at Kilobase Resolution Reveals
+Principles of Chromatin Looping.” Cell 159, 2014.
+
+5. https://github.com/phasegenomics/matlock
+
+6. https://github.com/phasegenomics/juicebox_scripts
